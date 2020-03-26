@@ -1,0 +1,17 @@
+{
+	"name": "ModelDB",
+	"version": "0.0.1",
+	"description": "Radon ModelDB database module",
+	"main": "lib/index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": "",
+	"keywords": [
+		"FIBJS"
+		,"database"
+		,"mongo"
+	],
+	"author": "SunFeith",
+	"license": "BSD"
+}

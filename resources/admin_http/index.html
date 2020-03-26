@@ -1,0 +1,292 @@
+<html>
+<head>
+	<title>Radon Admin Server Interface</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<script type="text/javascript" src="script/base.js"></script>
+	<style type="text/css">
+		table, td, th {
+			border: 1px solid #ccc;
+		}
+		td, th {
+			padding: 5px;
+		}
+		* {
+			font-family: "微软雅黑";
+			font-size: 12px;
+		}
+		.lv2 {
+			background-color: #CFFFBE;
+		}
+		.lv2 .id {
+			padding-left: 2em;
+		}
+		.lv3 {
+			background-color: #FFF6BE;
+		}
+		.lv3 .id {
+			padding-left: 4em;
+		}
+	</style>
+</head>
+<body>
+	<button onclick="loadProcessStat()">Refresh</button>
+	<button onclick="actReload(false)">Reload Config</button>
+	<!-- <button onclick="actProcess('restart', false)">Restart</button> -->
+	<button onclick="actDaemon('stop')">Daemon Stop</button>
+	<button onclick="actDaemon('kill', true)">Daemon Kill</button>
+	<button onclick="actDaemon('restart')">Daemon Restart</button>
+	<button onclick="actDaemon('reload')">Daemon Reload</button>
+	<hr/>
+	<div id="PROC_STAT_LIST">
+		<table cellspacing="0">
+			<thead>
+				<tr>
+					<th>进程名</th>
+					<th>进程ID</th>
+					<th>Req Task Ing</th>
+					<th>状态</th>
+					<th>历史请求数</th>
+					<th>请求消耗总时间</th>
+					<th>重启数</th>
+					<th>更新数</th>
+					<th>活跃时间</th>
+					<th>运行时间</th>
+					<th>使用堆大小</th>
+					<th>总堆大小</th>
+					<th>消耗内存</th>
+					<th>最大内存</th>
+					<th>操作</th>
+				</tr>
+			</thead>
+			<tbody id="PROC_LIST_BODY">
+			</tbody>
+		</table>
+	</div>
+</body>
+</html>
+<script type="text/javascript">
+function loadProcessStat()
+{
+	request('api/stat', function(err, data){
+		if (err){
+			alert('Request Api Error: ' + err.message + ' (' + err.code + ')');
+			return;
+		}
+
+		// sort the process data
+		data.sort(sortProcess);
+
+		var html = '';
+		var item, pad;
+		for (var i = 0; i < data.length; i++)
+		{
+			item = data[i];
+			pad = item.id.split('.').length;
+			html += '<tr class="lv'+pad+'">';
+			html += '<td class="id">' + item.id + '</td>';
+			html += '<td>' + item.pid + '</td>';
+			if (item.status)
+			{
+				var status = item.status;
+				var task_str = '';
+				for(let n in status.req_task)
+				{
+					if(status.req_task.hasOwnProperty(n))
+					{
+						var t = new Date(status.req_task[n].t);
+						t = `${t.getHours()}:${t.getMinutes()}:${t.getSeconds()}`;
+						task_str += `<div>${status.req_task[n].e} | ${t}</div>`;
+					}
+				}
+
+				html += `<td>${task_str || '--'}</td>`;
+				html += '<td>状态: ' + item.status.status + ' / 任务: ' + item.status.jobs + '</td>';
+				html += '<td>' + item.status.jobs_count + '</td>';
+				html += '<td>' + item.status.jobs_time/1000 + '</td>';
+			}
+			else
+			{
+				html += '<td> - </td>';
+				html += '<td> - </td>';
+				html += '<td> - </td>';
+				html += '<td> - </td>';
+			}
+			html += '<td>' + item.restart + '</td>';
+			html += '<td>' + item.updates + '</td>';
+			html += '<td>' + (new Date(item.active)).toLocaleString() + '</td>';
+			html += '<td>' + formatTime(item.uptime) + '</td>';
+			html += '<td>' + formatSize(item.mem.heapUsed) + '</td>';
+			html += '<td>' + formatSize(item.mem.heapTotal) + '</td>';
+			html += '<td>' + formatSize(item.mem.rss) + '</td>';
+			html += '<td>' + formatSize(item.mem.max) + '</td>';
+			html += '<td>' + showAction(item) + '</td>';
+			html += '</tr>';
+		}
+
+		$('PROC_LIST_BODY').innerHTML = html;
+	});
+}
+
+function sortProcess(a, b)
+{
+	var an = a.id;
+	var bn = b.id;
+	var cmp;
+
+	for (var i = 0; i < an.length; i++)
+	{
+		if (i >= bn.length)
+		{
+			return 1;
+		}
+		cmp = an.charCodeAt(i) - bn.charCodeAt(i);
+		if (cmp)
+		{
+			return cmp;
+		}
+	}
+
+	return (i == bn.length) ? 0 : -1;
+}
+
+function formatSize(size)
+{
+	var list = ['GB', 'MB', 'KB'];
+	var unit = 'Byte';
+	while (size > 2048 && list.length)
+	{
+		size /= 1024;
+		unit = list.pop();
+	}
+
+	return size.toFixed(2) + ' ' + unit;
+}
+
+function formatTime(time)
+{
+	time = Math.round(time);
+
+	var list = [];
+	var cur = time % 60;
+	time = (time - cur) / 60;
+	list.unshift(cur);
+
+	if (time > 0)
+	{
+		cur = time % 60;
+		time = (time - cur) / 60;
+		list.unshift(cur, ':');
+	}
+	if (time > 0)
+	{
+		cur = time % 24;
+		time = (time - cur) / 24;
+		list.unshift(cur, ':');
+	}
+
+	if (time > 0)
+	{
+		list.unshift(time, ' day ');
+	}
+
+	return list.join('');
+}
+
+function makeAction(act, text)
+{
+	return '<button onclick="' + act + '">' + text + '</button> ';
+}
+function showAction(item)
+{
+	var html = '';
+	html += makeAction("actDump('" + item.id + "')", 'Dump');
+	html += makeAction("actReload('" + item.id + "')", 'Reload');
+	html += makeAction("actConfigStat('" + item.id + "')", 'Config');
+	html += makeAction("actProcess('halt', '" + item.id + "')", 'Halt');
+	html += makeAction("actProcess('stop_process', '" + item.pid + "')", 'PausePs');
+	html += makeAction("actProcess('resume_process', '" + item.pid + "')", 'ResumePs');
+	html += makeAction("actProcess('stack', '" + item.pid + "')", 'print Stack');
+
+	return html;
+}
+
+function actDump(id)
+{
+	request('api/dump', {'id': id}, function(err, data){
+		if (err)
+		{
+			alert('dump heap data request error: ' + err.message + '('+ err.code + ')');
+		}
+		else
+		{
+			alert('dump heap data success');
+		}
+	});
+}
+
+function actConfigStat(id)
+{
+	request('api/config', {'id': id}, function(err, data){
+		if (err)
+		{
+			alert('get config stat request error: ' + err.message + '('+ err.code + ')');
+		}
+		else
+		{
+			var result = 'process config cache stat:\n';
+			for (var i = 0; i < data.length; i++)
+			{
+				result += '\n' + data[i].file + ' @ ';
+				result += (new Date(data[i].time)).toLocaleString();
+			}
+
+			alert(result);
+		}
+	});
+}
+
+function actReload(id)
+{
+	request('api/reload', {'id': id}, function(err, data){
+		if (err)
+		{
+			alert('reload config request error: ' + err.message + '('+ err.code + ')');
+		}
+		else
+		{
+			alert('reload config success');
+		}
+	});
+}
+
+function actProcess(act, id)
+{
+	request('api/' + act, {'id': id}, function(err, data){
+		if (err)
+		{
+			alert('restart process request error: ' + err.message + '('+ err.code + ')');
+		}
+		else
+		{
+			var result = 'process restarting';
+			alert(data.message || result);
+		}
+	});
+}
+
+function actDaemon(act, param)
+{
+	request('api/daemon', {'act': act, 'param': param}, function(err, data){
+		if (err)
+		{
+			alert('run daemon action error: ' + err.message + '('+ err.code + ')');
+		}
+		else
+		{
+			alert(data);
+		}
+	});
+}
+
+loadProcessStat();
+</script>
